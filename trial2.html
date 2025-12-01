@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Parking System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f4f4f9;
+            color: #333;
+        }
+
+        header {
+            background: #4caf50;
+            color: white;
+            text-align: center;
+            padding: 1rem 0;
+            font-size: 1.5rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            background: white;
+            padding: 1rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input,
+        select,
+        button {
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ccc;
+        }
+
+        th,
+        td {
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        .qr-code {
+            width: 100px;
+            height: 100px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+        .payment-section {
+            margin-top: 1rem;
+        }
+
+        .completed {
+            background-color: #ffe6e6;
+        }
+
+        .cancelled {
+            background-color: #e6e6e6;
+            text-decoration: line-through;
+            color: #888;
+        }
+
+        .receipt {
+            margin-top: 0.5rem;
+            background: #e0ffe0;
+            padding: 0.5rem;
+            border-radius: 5px;
+        }
+
+        .filter-section {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <header>Smart Parking System</header>
+    <div class="container">
+        <h2>Reservation Form</h2>
+        <form id="reservationForm">
+            <label for="name">Name:</label>
+            <input type="text" id="name" required />
+
+            <label for="plate">Plate Number:</label>
+            <input type="text" id="plate" required />
+
+            <label for="contact">Contact Number:</label>
+            <input type="text" id="contact" required />
+
+            <label for="location">Location:</label>
+            <select id="location" required></select>
+
+            <label for="sublocation">Sublocation:</label>
+            <select id="sublocation" required></select>
+
+            <label for="startTime">Parking Start Time:</label>
+            <input type="datetime-local" id="startTime" required />
+
+            <label for="endTime">Parking End Time:</label>
+            <input type="datetime-local" id="endTime" required />
+
+            <button type="submit">Reserve</button>
+        </form>
+
+        <h2>Reservations</h2>
+
+        <div class="filter-section">
+            <label for="filterStatus">Filter by Status: </label>
+            <select id="filterStatus">
+                <option value="all">All</option>
+                <option value="Active">Active</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+            </select>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Plate</th>
+                    <th>Contact</th>
+                    <th>Location</th>
+                    <th>Sublocation</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Bill</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="reservationList"></tbody>
+        </table>
+
+        <div class="stats">
+            <span>Total Reserved: <span id="reservedCount">0</span></span>
+            <span>Total Available: <span id="availableCount">16</span></span>
+        </div>
+    </div>
+
+    <script>
+        const reservationForm = document.getElementById("reservationForm");
+        const reservationList = document.getElementById("reservationList");
+        const reservedCount = document.getElementById("reservedCount");
+        const availableCount = document.getElementById("availableCount");
+        const locationSelect = document.getElementById("location");
+        const sublocationSelect = document.getElementById("sublocation");
+        const filterStatus = document.getElementById("filterStatus");
+
+        const sublocationsMap = {
+            "Residential Area": ["Sai Nagar", "Green Park", "Shivaji Colony", "Ramdev Wadi"],
+            "Campus Area": ["Government College", "Research Avsari College", "MIT", "COEP Tech"],
+            "Industrial Area": ["Tata Motors", "Bajaj Auto", "Thermax", "SKF Bearings"],
+            "Mall": ["Phoenix Mall", "Seasons Mall", "Amanora", "Pavilion Mall"]
+        };
+
+        let reservations = [];
+        const ratePerHour = 50;
+        const finePerHour = 30;
+
+        const slotsPerSublocation = 2;
+
+        function totalSlotsPerLocation() {
+            const result = {};
+            for (const loc in sublocationsMap) {
+                result[loc] = sublocationsMap[loc].length * slotsPerSublocation;
+            }
+            return result;
+        }
+
+        function updateStats() {
+            const totalSlots = Object.values(totalSlotsPerLocation()).reduce((a, b) => a + b, 0);
+            const activeReservations = reservations.filter(r => r.status !== 'Cancelled');
+            const totalReserved = activeReservations.length;
+            reservedCount.textContent = totalReserved;
+            availableCount.textContent = totalSlots - totalReserved;
+        }
+
+        function updateLocationOptions() {
+            locationSelect.innerHTML = '<option value="">Select Location</option>';
+            for (const loc in sublocationsMap) {
+                const total = sublocationsMap[loc].length * slotsPerSublocation;
+                const reserved = reservations.filter(r => r.location === loc && r.status !== 'Cancelled').length;
+                const available = total - reserved;
+                const option = document.createElement("option");
+                option.value = loc;
+                option.textContent = `${loc} (Reserved: ${reserved} / Available: ${available})`;
+                if (available <= 0) option.disabled = true;
+                locationSelect.appendChild(option);
+            }
+        }
+
+        locationSelect.addEventListener("change", () => {
+            const selectedLocation = locationSelect.value;
+            sublocationSelect.innerHTML = "";
+            if (selectedLocation && sublocationsMap[selectedLocation]) {
+                sublocationsMap[selectedLocation].forEach(sub => {
+                    const reserved = reservations.filter(r => r.sublocation === sub && r.status !== 'Cancelled').length;
+                    const available = slotsPerSublocation - reserved;
+                    const option = document.createElement("option");
+                    option.value = sub;
+                    option.textContent = `${sub} (Reserved: ${reserved} / Available: ${available})`;
+                    if (available <= 0) option.disabled = true;
+                    sublocationSelect.appendChild(option);
+                });
+            }
+        });
+
+        reservationForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            const location = locationSelect.value;
+            const sublocation = sublocationSelect.value;
+            const reservedInSub = reservations.filter(r => r.sublocation === sublocation && r.status !== 'Cancelled').length;
+
+            if (reservedInSub >= slotsPerSublocation) {
+                alert(`❌ No slots available in ${sublocation}.`);
+                return;
+            }
+
+            const reservation = {
+                name: document.getElementById("name").value,
+                plate: document.getElementById("plate").value,
+                contact: document.getElementById("contact").value,
+                location,
+                sublocation,
+                startTime: document.getElementById("startTime").value,
+                endTime: document.getElementById("endTime").value,
+                status: 'Active'
+            };
+
+            reservations.push(reservation);
+            displayReservations();
+            updateStats();
+            updateLocationOptions();
+            reservationForm.reset();
+        });
+
+        function calculateBill(startTime, endTime) {
+            const start = new Date(startTime);
+            const end = new Date(endTime);
+            const now = new Date();
+            const reservedHours = Math.ceil((end - start) / (1000 * 60 * 60));
+            const baseCost = reservedHours * ratePerHour;
+
+            let fine = 0;
+            if (now > end) {
+                const overdueHours = Math.ceil((now - end) / (1000 * 60 * 60));
+                fine = overdueHours * finePerHour;
+            }
+
+            return baseCost + fine;
+        }
+
+        function displayReservations() {
+            const selectedFilter = filterStatus.value;
+            reservationList.innerHTML = "";
+            reservations.forEach((res, index) => {
+                const isCompleted = new Date(res.endTime) < new Date();
+                const effectiveStatus = res.status === 'Active' && isCompleted ? 'Completed' : res.status;
+                if (selectedFilter !== 'all' && selectedFilter !== effectiveStatus) return;
+
+                const bill = calculateBill(res.startTime, res.endTime);
+                const row = document.createElement("tr");
+                row.className = res.status === 'Cancelled' ? 'cancelled' : isCompleted ? 'completed' : '';
+                row.innerHTML = `
+          <td>${res.name}</td>
+          <td>${res.plate}</td>
+          <td>${res.contact}</td>
+          <td>${res.location}</td>
+          <td>${res.sublocation}</td>
+          <td>${new Date(res.startTime).toLocaleString()}</td>
+          <td>${new Date(res.endTime).toLocaleString()}</td>
+          <td>₹${bill}</td>
+          <td>${effectiveStatus}</td>
+          <td>
+            ${res.status === 'Active' ? `<button onclick="generateQRCode(${bill}, ${index})">Pay</button><div id="qr-code-${index}" class="payment-section"></div>` : ''}
+          </td>
+          <td>
+            ${res.status === 'Active' ? `<button onclick="cancelReservation(${index})">Cancel</button>` : ''}
+          </td>
+        `;
+                reservationList.appendChild(row);
+            });
+        }
+
+        function generateQRCode(amount, index) {
+            const qrCodeDiv = document.getElementById(`qr-code-${index}`);
+            qrCodeDiv.innerHTML = "";
+            const qrImage = document.createElement("img");
+            const upiId = "your-upi-id@upi";
+            const qrData = `upi://pay?pa=${upiId}&pn=SmartParking&am=${amount}&cu=INR`;
+            qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+            qrImage.alt = "QR Code";
+            qrImage.className = "qr-code";
+            qrCodeDiv.appendChild(qrImage);
+
+            const receipt = document.createElement("div");
+            receipt.className = "receipt";
+            receipt.innerHTML = `<strong>Receipt:</strong> ₹${amount} to ${upiId}`;
+            qrCodeDiv.appendChild(receipt);
+        }
+
+        function cancelReservation(index) {
+            reservations[index].status = 'Cancelled';
+            displayReservations();
+            updateStats();
+            updateLocationOptions();
+        }
+
+        filterStatus.addEventListener("change", displayReservations);
+
+        updateStats();
+        updateLocationOptions();
+    </script>
+</body>
+
+</html>
